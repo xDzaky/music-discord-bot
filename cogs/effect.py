@@ -217,6 +217,58 @@ class Effect(commands.Cog):
         await player.add_filter(effect, ctx.author)
         await send(ctx, "addEffect", effect.tag)
 
+    @commands.hybrid_command(name="bassboost", aliases=get_aliases("bassboost"))
+    @app_commands.describe(level="Choose bass boost intensity: light, medium, or heavy")
+    @app_commands.choices(level=[
+        app_commands.Choice(name="Light", value="light"),
+        app_commands.Choice(name="Medium", value="medium"),
+        app_commands.Choice(name="Heavy", value="heavy")
+    ])
+    @commands.dynamic_cooldown(cooldown_check, commands.BucketType.guild)
+    async def bassboost(self, ctx: commands.Context, level: str = "medium") -> None:
+        "Apply bass boost effect to enhance low frequencies."
+        player = await check_access(ctx)
+
+        # Remove any existing bass boost
+        for tag in ["bass_light", "bass_medium", "bass_heavy"]:
+            if player.filters.has_filter(filter_tag=tag):
+                player.filters.remove_filter(filter_tag=tag)
+
+        preset_map = {
+            "light": voicelink.Equalizer.bass_light,
+            "medium": voicelink.Equalizer.bass_medium,
+            "heavy": voicelink.Equalizer.bass_heavy
+        }
+        effect = preset_map.get(level.lower(), voicelink.Equalizer.bass_medium)()
+        await player.add_filter(effect, ctx.author)
+        await send(ctx, "addEffect", f"Bass Boost ({level.capitalize()})")
+
+    @commands.hybrid_command(name="treble", aliases=get_aliases("treble"))
+    @commands.dynamic_cooldown(cooldown_check, commands.BucketType.guild)
+    async def treble(self, ctx: commands.Context) -> None:
+        "Apply treble boost effect to enhance high frequencies."
+        player = await check_access(ctx)
+
+        if player.filters.has_filter(filter_tag="treble"):
+            player.filters.remove_filter(filter_tag="treble")
+
+        effect = voicelink.Equalizer.treble()
+        await player.add_filter(effect, ctx.author)
+        await send(ctx, "addEffect", effect.tag)
+
+    @commands.hybrid_command(name="vocal", aliases=get_aliases("vocal"))
+    @commands.dynamic_cooldown(cooldown_check, commands.BucketType.guild)
+    async def vocal(self, ctx: commands.Context) -> None:
+        "Apply vocal boost effect to enhance voice clarity."
+        player = await check_access(ctx)
+
+        if player.filters.has_filter(filter_tag="vocal"):
+            player.filters.remove_filter(filter_tag="vocal")
+
+        effect = voicelink.Equalizer.vocal()
+        await player.add_filter(effect, ctx.author)
+        await send(ctx, "addEffect", effect.tag)
+
     @commands.hybrid_command(name="cleareffect", aliases=get_aliases("cleareffect"))
     @app_commands.describe(effect="Remove a specific sound effects.")
     @app_commands.autocomplete(effect=effect_autocomplete)

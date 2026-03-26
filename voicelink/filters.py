@@ -169,7 +169,7 @@ class Equalizer(Filter):
     @classmethod
     def piano(cls):
         """Equalizer preset which increases the mids and highs
-            of a track, preferably a piano based one, to make it 
+            of a track, preferably a piano based one, to make it
             stand out.
         """
 
@@ -179,6 +179,66 @@ class Equalizer(Filter):
             (9, 0.0), (10, 0.0), (11, 0.5), (12, 0.25), (13, -0.025)
         ]
         return cls(tag="piano", levels=levels)
+
+    @classmethod
+    def bass_light(cls):
+        """Equalizer preset with light bass boost.
+            Subtle low-end enhancement for a warmer sound.
+        """
+        levels = [
+            (0, 0.2), (1, 0.15), (2, 0.1), (3, 0.05), (4, 0.0),
+            (5, 0.0), (6, 0.0), (7, 0.0), (8, 0.0), (9, 0.0),
+            (10, 0.0), (11, 0.0), (12, 0.0), (13, 0.0), (14, 0.0)
+        ]
+        return cls(tag="bass_light", levels=levels)
+
+    @classmethod
+    def bass_medium(cls):
+        """Equalizer preset with medium bass boost.
+            Noticeable bass enhancement for most genres.
+        """
+        levels = [
+            (0, 0.4), (1, 0.3), (2, 0.2), (3, 0.15), (4, 0.1),
+            (5, 0.05), (6, 0.0), (7, 0.0), (8, 0.0), (9, 0.0),
+            (10, 0.0), (11, 0.0), (12, 0.0), (13, 0.0), (14, 0.0)
+        ]
+        return cls(tag="bass_medium", levels=levels)
+
+    @classmethod
+    def bass_heavy(cls):
+        """Equalizer preset with heavy bass boost.
+            Strong bass emphasis for EDM, hip-hop, and bass-heavy music.
+        """
+        levels = [
+            (0, 0.6), (1, 0.5), (2, 0.4), (3, 0.3), (4, 0.2),
+            (5, 0.1), (6, 0.05), (7, 0.0), (8, 0.0), (9, 0.0),
+            (10, 0.0), (11, 0.0), (12, 0.0), (13, 0.0), (14, 0.0)
+        ]
+        return cls(tag="bass_heavy", levels=levels)
+
+    @classmethod
+    def treble(cls):
+        """Equalizer preset with treble boost.
+            Enhanced high frequencies for crisp and clear audio.
+        """
+        levels = [
+            (0, 0.0), (1, 0.0), (2, 0.0), (3, 0.0), (4, 0.0),
+            (5, 0.0), (6, 0.0), (7, 0.0), (8, 0.1), (9, 0.15),
+            (10, 0.2), (11, 0.25), (12, 0.3), (13, 0.35), (14, 0.4)
+        ]
+        return cls(tag="treble", levels=levels)
+
+    @classmethod
+    def vocal(cls):
+        """Equalizer preset with vocal boost.
+            Enhanced mid frequencies for clearer vocals.
+        """
+        levels = [
+            (0, -0.2), (1, -0.15), (2, -0.1), (3, 0.0), (4, 0.15),
+            (5, 0.25), (6, 0.3), (7, 0.25), (8, 0.15), (9, 0.0),
+            (10, -0.1), (11, -0.15), (12, -0.2), (13, -0.2), (14, -0.2)
+        ]
+        return cls(tag="vocal", levels=levels)
 
 class Timescale(Filter):
     """Filter which changes the speed and pitch of a track.

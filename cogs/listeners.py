@@ -73,15 +73,20 @@ class Listeners(commands.Cog):
                 channel = self.bot.get_channel(channel_id)
                 if not channel:
                     continue
-                elif not any(False if member.bot or member.voice.self_deaf else True for member in channel.members):
+                
+                settings = await func.get_settings(channel.guild.id)
+                if not settings.get("24/7", False) and not any(False if member.bot or member.voice.self_deaf else True for member in channel.members):
                     continue
                     
                 dj_member = channel.guild.get_member(data.get("dj"))
                 if not dj_member:
-                    continue
+                    if settings.get("24/7", False):
+                        dj_member = channel.guild.me
+                    else:
+                        continue
 
-                # Get the guild settings
-                settings = await func.get_settings(channel.guild.id)
+                if not dj_member:
+                    continue
 
                 # Connect to the channel and initialize the player.
                 player: voicelink.Player = await channel.connect(
