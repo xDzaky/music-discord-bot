@@ -885,7 +885,7 @@ class Advanced(commands.Cog):
         await send(ctx, f"Spotify Activity auto-play is currently **{'enabled' if enabled else 'disabled'}**.")
 
     @commands.Cog.listener()
-    async def on_voicelink_track_start(self, player: voicelink.Player, track, _):
+    async def on_voicelink_track_start(self, player: voicelink.Player, track):
         await self._update_music_stats(player, track)
         settings_data = await get_settings(player.guild.id)
         channel_id = settings_data.get("song_announcement_channel_id")
