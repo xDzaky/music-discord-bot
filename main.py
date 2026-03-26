@@ -93,14 +93,14 @@ class Vocard(commands.Bot):
                 except Exception as e:
                     await func.send(ctx, str(e), ephemeral=True)
 
-                finally:
-                    return await message.delete()
+                await message.delete()
+                return
 
         await self.process_commands(message)
 
     async def connect_db(self) -> None:
         if not ((db_name := func.settings.mongodb_name) and (db_url := func.settings.mongodb_url)):
-            raise Exception("MONGODB_NAME and MONGODB_URL can't not be empty in settings.json")
+            raise Exception("MONGODB_NAME and MONGODB_URL can't be empty in settings.json or environment variables.")
 
         try:
             func.MONGO_DB = AsyncIOMotorClient(host=db_url)
@@ -142,7 +142,8 @@ class Vocard(commands.Bot):
         # Update version tracking
         if not func.settings.version or func.settings.version != update.__version__:
             await self.tree.sync()
-            func.update_json("settings.json", new_data={"version": update.__version__})
+            if func.HAS_SETTINGS_FILE:
+                func.update_json(func.SETTINGS_FILE_NAME, new_data={"version": update.__version__})
             for locale_key, values in func.MISSING_TRANSLATOR.items():
                 func.logger.warning(f'Missing translation for "{", ".join(values)}" in "{locale_key}"')
 
@@ -216,7 +217,7 @@ async def get_prefix(bot: commands.Bot, message: discord.Message) -> str:
     return prefix
 
 # Loading settings and logger
-func.settings = Settings(func.open_json("settings.json"))
+func.settings = Settings(func.open_json(func.SETTINGS_FILE_NAME))
 
 LOG_SETTINGS = func.settings.logging
 if (LOG_FILE := LOG_SETTINGS.get("file", {})).get("enable", True):
@@ -232,6 +233,12 @@ if (LOG_FILE := LOG_SETTINGS.get("file", {})).get("enable", True):
 for log_name, log_level in LOG_SETTINGS.get("level", {}).items():
     _logger = logging.getLogger(log_name)
     _logger.setLevel(log_level)
+
+if not func.HAS_SETTINGS_FILE:
+    func.logger.warning(
+        "Settings file '%s' was not found. Vocard will use environment variables where available.",
+        func.SETTINGS_FILE_NAME
+    )
 
 # Setup the bot object
 intents = discord.Intents.default()
@@ -250,5 +257,11 @@ bot = Vocard(
 )
 
 if __name__ == "__main__":
+    if not func.settings.token:
+        raise Exception("TOKEN can't be empty in settings file or environment variables.")
+
+    if not func.settings.nodes:
+        raise Exception("At least one Lavalink node must be configured in settings or environment variables.")
+
     update.check_version(with_msg=True)
     bot.run(func.settings.token, root_logger=True)

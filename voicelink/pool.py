@@ -258,7 +258,16 @@ class Node:
             json=data
         ) as resp:
             if resp.status >= 300:
-                raise NodeException(f"Getting errors from Lavalink REST api")
+                try:
+                    error_body = await resp.json(content_type=None)
+                except Exception:
+                    error_body = await resp.text()
+
+                if isinstance(error_body, dict):
+                    error_body = error_body.get("message") or error_body.get("trace") or error_body.get("error") or str(error_body)
+
+                detail = str(error_body).strip() or "Unknown error"
+                raise NodeException(f"Lavalink REST API returned {resp.status}: {detail[:300]}")
             
             if method == RequestMethod.DELETE:
                 return await resp.json(content_type=None)
@@ -361,11 +370,20 @@ class Node:
         You can also pass in a discord.py Context object to get a
         Context object on any track you search.
         """
+        query = (query or "").strip()
+        if not query:
+            raise TrackLoadError("Please provide a YouTube/Spotify URL or search query.")
 
         if not URL_REGEX.match(query) and ':' not in query:
             query = f"{search_type}:{query}"
 
-        response: dict[str, Any] = await self.send(RequestMethod.GET, f"loadtracks?identifier={quote(query)}")
+        try:
+            response: dict[str, Any] = await self.send(RequestMethod.GET, f"loadtracks?identifier={quote(query)}")
+        except NodeNotAvailable:
+            raise
+        except NodeException as exc:
+            raise TrackLoadError(f"Unable to load this track right now. {exc}") from exc
+
         data = response.get("data")
         load_type = response.get("loadType")
 
@@ -376,7 +394,13 @@ class Node:
             return None
 
         elif load_type == "error":
-            raise TrackLoadError(f"{data['message']} [{data['severity']}]")
+            if isinstance(data, dict):
+                message = data.get("message", "There was an error while loading this track.")
+                severity = data.get("severity", "COMMON")
+            else:
+                message = "There was an error while loading this track."
+                severity = "COMMON"
+            raise TrackLoadError(f"{message} [{severity}]")
 
         elif load_type in ("playlist", "recommendations"):
             return Playlist(playlist_info=data["info"], tracks=data["tracks"], requester=requester)

@@ -41,6 +41,10 @@ class Listeners(commands.Cog):
         
     async def start_nodes(self) -> None:
         """Connect and intiate nodes."""
+        if not func.settings.nodes:
+            func.logger.error("No Lavalink node configuration found. Set a node in settings.json or environment variables.")
+            return
+
         for n in func.settings.nodes.values():
             try:
                 await self.voicelink.create_node(
@@ -138,16 +142,32 @@ class Listeners(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voicelink_track_stuck(self, player: voicelink.Player, track, _):
+        func.logger.warning(
+            "Track stuck in %s(%s). Advancing queue.",
+            player.guild.name,
+            player.guild.id
+        )
         await asyncio.sleep(10)
-        await player.do_next()
+        if not player.is_playing:
+            await player.do_next()
 
     @commands.Cog.listener()
     async def on_voicelink_track_exception(self, player: voicelink.Player, track, error: dict):
+        message = error.get("message", "Unknown playback error")
+        func.logger.warning(
+            "Track exception in %s(%s): %s",
+            player.guild.name,
+            player.guild.id,
+            message
+        )
         try:
-            player._track_is_stuck = True
-            await player.context.send(f"{error['message']} The next song will begin in the next 5 seconds.", delete_after=10)
+            await player.context.send(f"{message} The next song will begin in the next 5 seconds.", delete_after=10)
         except:
             pass
+
+        await asyncio.sleep(5)
+        if not player.is_playing:
+            await player.do_next()
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):

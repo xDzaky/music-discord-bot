@@ -40,9 +40,9 @@ from motor.motor_asyncio import (
 )
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-
-if not os.path.exists(os.path.join(ROOT_DIR, "settings.json")):
-    raise Exception("Settings file not set!")
+SETTINGS_FILE_NAME = os.getenv("SETTINGS_FILE", "settings.json")
+SETTINGS_FILE_PATH = os.path.join(ROOT_DIR, SETTINGS_FILE_NAME)
+HAS_SETTINGS_FILE = os.path.exists(SETTINGS_FILE_PATH)
 
 #--------------- Cache Var ---------------
 settings: Settings
@@ -85,7 +85,8 @@ class TempCtx():
 #-------------- Vocard Functions --------------
 def open_json(path: str) -> dict:
     try:
-        with open(os.path.join(ROOT_DIR, path), encoding="utf8") as json_file:
+        target = path if os.path.isabs(path) else os.path.join(ROOT_DIR, path)
+        with open(target, encoding="utf8") as json_file:
             return json.load(json_file)
     except:
         return {}
@@ -97,7 +98,8 @@ def update_json(path: str, new_data: dict) -> None:
     else:
         data.update(new_data)
 
-    with open(os.path.join(ROOT_DIR, path), "w") as json_file:
+    target = path if os.path.isabs(path) else os.path.join(ROOT_DIR, path)
+    with open(target, "w") as json_file:
         json.dump(data, json_file, indent=4)
 
 def langs_setup() -> None:

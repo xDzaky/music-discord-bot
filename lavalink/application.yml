@@ -1,5 +1,5 @@
 server: # REST and WS server
-  port: 2333
+  port: ${SERVER_PORT:2333}
   address: 0.0.0.0
   http2:
     enabled: true # Whether to enable HTTP/2 support
@@ -56,16 +56,16 @@ plugins:
       yandexmusic: false # Enable Yandex Music lyrics source
       vkmusic: false # Enable Vk Music lyrics source
     spotify:
-      clientId: ""
-      clientSecret: ""
+      clientId: "${SPOTIFY_CLIENT_ID:}"
+      clientSecret: "${SPOTIFY_CLIENT_SECRET:}"
       # spDc: "your sp dc cookie" # the sp dc cookie used for accessing the spotify lyrics api
-      countryCode: "US" # the country code you want to use for filtering the artists top tracks. See https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2
+      countryCode: "${SPOTIFY_COUNTRY_CODE:US}" # the country code you want to use for filtering the artists top tracks. See https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2
       playlistLoadLimit: 6 # The number of pages at 100 tracks each
       albumLoadLimit: 6 # The number of pages at 50 tracks each
       resolveArtistsInSearch: true # Whether to resolve artists in track search results (can be slow)
       localFiles: false # Enable local files support with Spotify playlists. Please note `uri` & `isrc` will be `null` & `identifier` will be `"local"`
       preferAnonymousToken: true # Whether to use the anonymous token for resolving tracks, artists and albums. Spotify generated playlists are always resolved with the anonymous tokens since they do not work otherwise. This requires the customTokenEndpoint to be set.
-      customTokenEndpoint: "http://spotify-tokener:49152/api/token" # Optional custom endpoint for getting the anonymous token. If not set, spotify's default endpoint will be used which might not work. The response must match spotify's anonymous token response format.
+      customTokenEndpoint: "${SPOTIFY_TOKEN_ENDPOINT:http://spotify-tokener:49152/api/token}" # Optional custom endpoint for getting the anonymous token. If not set, spotify's default endpoint will be used which might not work. The response must match spotify's anonymous token response format.
     applemusic:
       countryCode: "US" # the country code you want to use for filtering the artists top tracks and language. See https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2
       mediaAPIToken: "your apple music api token" # apple music api token
@@ -113,7 +113,7 @@ lavalink:
 #  defaultPluginRepository: "https://maven.lavalink.dev/releases" # optional, defaults to the Lavalink release repository
 #  defaultPluginSnapshotRepository: "https://maven.lavalink.dev/snapshots" # optional, defaults to the Lavalink snapshot repository
   server:
-    password: "youshallnotpass"
+    password: "${LAVALINK_SERVER_PASSWORD:youshallnotpass}"
     sources:
       # The default Youtube source is now deprecated and won't receive further updates. Please use https://github.com/lavalink-devs/youtube-source#plugin instead.
       youtube: false
@@ -179,11 +179,11 @@ logging:
     path: ./logs/
 
   level:
-    root: INFO
-    lavalink: INFO
+    root: ${LOG_LEVEL_ROOT:INFO}
+    lavalink: ${LOG_LEVEL_LAVALINK:INFO}
 
   request:
-    enabled: true
+    enabled: ${LAVALINK_REQUEST_LOGGING:true}
     includeClientInfo: true
     includeHeaders: false
     includeQueryString: true
