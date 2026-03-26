@@ -456,7 +456,10 @@ class InteractiveController(discord.ui.View):
                 except ValueError:
                     pass
                 
-        self.cooldown = commands.CooldownMapping.from_cooldown(2.0, 10.0, key)
+        anti_spam_enabled = player.settings.get("anti_spam_enabled", False)
+        rate = player.settings.get("anti_spam_rate", 2 if anti_spam_enabled else 3)
+        per = player.settings.get("anti_spam_window", 12 if anti_spam_enabled else 8)
+        self.cooldown = commands.CooldownMapping.from_cooldown(max(rate, 1), max(per, 1), key)
             
     async def interaction_check(self, interaction: discord.Interaction):
         if not self.player.node._available:
@@ -467,6 +470,9 @@ class InteractiveController(discord.ui.View):
             return True
             
         if self.player.channel and self.player.is_user_join(interaction.user):
+            if self.player.settings.get("queue_locked", False) and not self.player.is_privileged(interaction.user, check_user_join=False):
+                await func.send(interaction, "Queue lock is enabled. Only DJ or admins can control the player.", ephemeral=True)
+                return False
             retry_after = self.cooldown.update_rate_limit(interaction)
             if retry_after:
                 raise views.ButtonOnCooldown(retry_after)

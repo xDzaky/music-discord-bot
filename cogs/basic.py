@@ -147,6 +147,8 @@ class Basic(commands.Cog):
 
         if not player.is_user_join(ctx.author):
             return await send(ctx, "notInChannel", ctx.author.mention, player.channel.mention, ephemeral=True)
+        if player.settings.get("queue_locked", False) and not player.is_privileged(ctx.author, check_user_join=False):
+            return await send(ctx, "Queue lock is enabled. Only DJ or admins can add songs.", ephemeral=True)
 
         if ctx.interaction:
             await ctx.interaction.response.defer()
@@ -239,6 +241,8 @@ class Basic(commands.Cog):
         player: voicelink.Player = ctx.guild.voice_client
         if not player:
             player = await voicelink.connect_channel(ctx)
+        if player.settings.get("queue_locked", False) and not player.is_privileged(ctx.author, check_user_join=False):
+            return await send(ctx, "Queue lock is enabled. Only DJ or admins can add songs.", ephemeral=True)
 
         if not player.is_user_join(ctx.author):
             return await send(ctx, "notInChannel", ctx.author.mention, player.channel.mention, ephemeral=True)
@@ -285,6 +289,8 @@ class Basic(commands.Cog):
 
         if not player.is_user_join(ctx.author):
             return await send(ctx, "notInChannel", ctx.author.mention, player.channel.mention, ephemeral=True)
+        if player.settings.get("queue_locked", False) and not player.is_privileged(ctx.author, check_user_join=False):
+            return await send(ctx, "Queue lock is enabled. Only DJ or admins can add songs.", ephemeral=True)
         
         if ctx.interaction:
             await ctx.interaction.response.defer()

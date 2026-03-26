@@ -29,6 +29,7 @@ import update
 import logging
 import voicelink
 import function as func
+import time
 
 from discord.ext import commands
 from ipc import IPCClient
@@ -63,6 +64,7 @@ class Vocard(commands.Bot):
         super().__init__(*args, **kwargs)
 
         self.ipc: IPCClient
+        self.music_request_cooldowns: dict[tuple[int, int], float] = {}
 
     async def on_message(self, message: discord.Message, /) -> None:
         # Ignore messages from bots or DMs
@@ -80,6 +82,27 @@ class Vocard(commands.Bot):
         settings = await func.get_settings(message.guild.id)
         if settings and (request_channel := settings.get("music_request_channel")):
             if message.channel.id == request_channel.get("text_channel_id"):
+                if settings.get("anti_spam_enabled", False):
+                    key = (message.guild.id, message.author.id)
+                    retry_after = settings.get("request_channel_cooldown", 4)
+                    last_used = self.music_request_cooldowns.get(key, 0)
+                    if (time.time() - last_used) < retry_after:
+                        try:
+                            await message.delete()
+                        except:
+                            pass
+                        return
+                    self.music_request_cooldowns[key] = time.time()
+
+                player: voicelink.Player = message.guild.voice_client
+                if player and player.settings.get("queue_locked", False) and not player.is_privileged(message.author, check_user_join=False):
+                    try:
+                        await message.reply("Queue lock is enabled. Only DJ or admins can add songs here.", delete_after=8)
+                        await message.delete()
+                    except:
+                        pass
+                    return
+
                 ctx = await self.get_context(message)
                 try:
                     cmd = self.get_command("play")

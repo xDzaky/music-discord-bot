@@ -188,6 +188,18 @@ class Listeners(commands.Cog):
         if not player:
             return
 
+        if (
+            player.settings.get("follow_voice", False)
+            and member.id == getattr(player.dj, "id", None)
+            and before.channel
+            and after.channel
+            and before.channel != after.channel
+        ):
+            perms = after.channel.permissions_for(member.guild.me)
+            if perms.connect and perms.speak:
+                player.channel = after.channel
+                await player.connect(timeout=0.0, reconnect=True)
+
         is_joined = True
         
         if not before.channel and after.channel:

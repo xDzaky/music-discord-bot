@@ -21,6 +21,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
+import asyncio
 import discord
 import function as func
 import re
@@ -106,7 +107,30 @@ class LyricsView(discord.ui.View):
         self.current_page: int = 1
         self.follow_player: bool = True
         self.synced_index: int = 0
+        self._sync_task = None
         self.add_item(LyricsDropdown(options))
+
+    def start_auto_sync(self) -> None:
+        if self.lang != "synced" or not self.synced_source or not self.player:
+            return
+
+        if self._sync_task and not self._sync_task.done():
+            return
+
+        async def runner():
+            try:
+                while not self.is_finished():
+                    await asyncio.sleep(3)
+                    if not self.response or not self.follow_player:
+                        continue
+                    try:
+                        await self.response.edit(embed=self.build_embed(), view=self)
+                    except:
+                        break
+            except:
+                return
+
+        self._sync_task = asyncio.create_task(runner())
 
     def _get_live_synced_index(self) -> int:
         if not self.synced_source:
@@ -158,6 +182,8 @@ class LyricsView(discord.ui.View):
     async def on_timeout(self) -> None:
         for child in self.children:
             child.disabled = True
+        if self._sync_task and not self._sync_task.done():
+            self._sync_task.cancel()
         try:
             await self.response.edit(view=self)
         except:

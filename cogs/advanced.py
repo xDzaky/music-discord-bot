@@ -22,6 +22,7 @@ SOFTWARE.
 """
 
 import asyncio
+import math
 import re
 import time
 from dataclasses import dataclass
@@ -32,6 +33,7 @@ import voicelink
 
 from discord import app_commands
 from discord.ext import commands
+from addons import LYRICS_PLATFORMS
 from function import (
     TempCtx,
     cooldown_check,
@@ -45,6 +47,7 @@ from function import (
     update_settings,
     update_user,
 )
+from views import LyricsView
 
 
 RADIO_STATIONS = {
@@ -138,6 +141,7 @@ class Advanced(commands.Cog):
         self.sleep_tasks: dict[int, asyncio.Task] = {}
         self.quiz_sessions: dict[int, QuizSession] = {}
         self.spotify_activity_cache: dict[tuple[int, int], tuple[str, float]] = {}
+        self.party_shuffle_cache: dict[int, float] = {}
 
     def cog_unload(self) -> None:
         for task in self.sleep_tasks.values():
@@ -265,6 +269,52 @@ class Advanced(commands.Cog):
         )
         return True
 
+    def _track_stats_entry(self, track) -> dict:
+        return {
+            "title": track.title,
+            "author": track.author,
+            "uri": track.uri,
+            "count": 0,
+            "identifier": normalize_text(f"{track.author}-{track.title}")[:120] or normalize_text(track.title)[:120],
+        }
+
+    async def _update_music_stats(self, player: voicelink.Player, track) -> None:
+        guild_settings = await get_settings(player.guild.id)
+        stats = guild_settings.setdefault("music_stats", {
+            "total_tracks": 0,
+            "total_minutes": 0.0,
+            "songs": [],
+            "users": [],
+        })
+        stats["total_tracks"] = stats.get("total_tracks", 0) + 1
+        stats["total_minutes"] = round(stats.get("total_minutes", 0.0) + ((track.length or 0) / 60000), 2)
+
+        track_key = normalize_text(f"{track.author}-{track.title}")[:120] or normalize_text(track.title)[:120]
+        songs = stats.setdefault("songs", [])
+        for entry in songs:
+            if entry.get("identifier") == track_key:
+                entry["count"] = entry.get("count", 0) + 1
+                break
+        else:
+            entry = self._track_stats_entry(track)
+            entry["count"] = 1
+            songs.append(entry)
+        songs.sort(key=lambda item: item.get("count", 0), reverse=True)
+        stats["songs"] = songs[:100]
+
+        users = stats.setdefault("users", [])
+        for entry in users:
+            if entry.get("user_id") == track.requester.id:
+                entry["count"] = entry.get("count", 0) + 1
+                entry["name"] = track.requester.display_name
+                break
+        else:
+            users.append({"user_id": track.requester.id, "name": track.requester.display_name, "count": 1})
+        users.sort(key=lambda item: item.get("count", 0), reverse=True)
+        stats["users"] = users[:100]
+
+        await update_settings(player.guild.id, {"$set": {"music_stats": stats}})
+
     @commands.hybrid_command(name="voteskip", aliases=get_aliases("voteskip"))
     @app_commands.describe(index="Optional queue index to skip to.")
     @commands.dynamic_cooldown(cooldown_check, commands.BucketType.guild)
@@ -309,6 +359,68 @@ class Advanced(commands.Cog):
         if player.queue._repeat.mode == voicelink.LoopType.TRACK:
             await player.set_repeat(voicelink.LoopType.OFF)
         await player.stop()
+
+    @commands.hybrid_command(name="queuelock", aliases=get_aliases("queuelock"))
+    @commands.has_permissions(manage_guild=True)
+    @commands.dynamic_cooldown(cooldown_check, commands.BucketType.guild)
+    async def queuelock(self, ctx: commands.Context):
+        "Toggle DJ/admin-only queue additions and controller usage."
+        guild_settings = await get_settings(ctx.guild.id)
+        enabled = not guild_settings.get("queue_locked", False)
+        await update_settings(ctx.guild.id, {"$set": {"queue_locked": enabled}})
+        player: voicelink.Player = ctx.guild.voice_client
+        if player:
+            player.settings["queue_locked"] = enabled
+        await send(ctx, f"Queue lock has been {'enabled' if enabled else 'disabled'}.")
+
+    @commands.hybrid_group(name="musicguard", aliases=get_aliases("musicguard"), invoke_without_command=True)
+    @commands.has_permissions(manage_guild=True)
+    @commands.dynamic_cooldown(cooldown_check, commands.BucketType.guild)
+    async def musicguard(self, ctx: commands.Context):
+        "Show the anti-spam music guard status."
+        guild_settings = await get_settings(ctx.guild.id)
+        await send(
+            ctx,
+            f"Music guard is **{'enabled' if guild_settings.get('anti_spam_enabled', False) else 'disabled'}**. "
+            f"Controller: `{guild_settings.get('anti_spam_rate', 2)}` actions / `{guild_settings.get('anti_spam_window', 12)}`s. "
+            f"Request channel cooldown: `{guild_settings.get('request_channel_cooldown', 4)}`s."
+        )
+
+    @musicguard.command(name="toggle", aliases=get_aliases("musicguardtoggle"))
+    @commands.has_permissions(manage_guild=True)
+    @commands.dynamic_cooldown(cooldown_check, commands.BucketType.guild)
+    async def musicguard_toggle(self, ctx: commands.Context):
+        "Toggle anti-spam and anti-raid protections for music controls."
+        guild_settings = await get_settings(ctx.guild.id)
+        enabled = not guild_settings.get("anti_spam_enabled", False)
+        await update_settings(ctx.guild.id, {"$set": {"anti_spam_enabled": enabled}})
+        player: voicelink.Player = ctx.guild.voice_client
+        if player:
+            player.settings["anti_spam_enabled"] = enabled
+        await send(ctx, f"Music guard has been {'enabled' if enabled else 'disabled'}.")
+
+    @musicguard.command(name="configure", aliases=get_aliases("musicguardconfigure"))
+    @commands.has_permissions(manage_guild=True)
+    @commands.dynamic_cooldown(cooldown_check, commands.BucketType.guild)
+    async def musicguard_configure(
+        self,
+        ctx: commands.Context,
+        controller_rate: commands.Range[int, 1, 10] = 2,
+        controller_window: commands.Range[int, 3, 60] = 12,
+        request_cooldown: commands.Range[int, 1, 30] = 4,
+    ):
+        "Configure anti-spam limits for controller and request channel."
+        data = {
+            "anti_spam_enabled": True,
+            "anti_spam_rate": controller_rate,
+            "anti_spam_window": controller_window,
+            "request_channel_cooldown": request_cooldown,
+        }
+        await update_settings(ctx.guild.id, {"$set": data})
+        player: voicelink.Player = ctx.guild.voice_client
+        if player:
+            player.settings.update(data)
+        await send(ctx, "Music guard settings updated.")
 
     @commands.hybrid_group(
         name="sleep",
@@ -360,6 +472,73 @@ class Advanced(commands.Cog):
         await update_settings(ctx.guild.id, {"$unset": {"song_announcement_channel_id": None}})
         await send(ctx, "Song announcements have been disabled.")
 
+    @commands.hybrid_group(name="serverqueue", aliases=get_aliases("serverqueue"), invoke_without_command=True)
+    @commands.dynamic_cooldown(cooldown_check, commands.BucketType.guild)
+    async def serverqueue(self, ctx: commands.Context):
+        "List saved server queue presets."
+        guild_settings = await get_settings(ctx.guild.id)
+        queues = guild_settings.get("saved_queues", {})
+        if not queues:
+            return await send(ctx, "There are no saved server queues yet.")
+
+        lines = []
+        for name, data in list(queues.items())[:10]:
+            lines.append(f"`{name}` - {len(data.get('tracks', []))} tracks")
+        await send(ctx, "Saved queues:\n" + "\n".join(lines))
+
+    @serverqueue.command(name="save", aliases=get_aliases("serverqueuesave"))
+    @commands.has_permissions(manage_guild=True)
+    @commands.dynamic_cooldown(cooldown_check, commands.BucketType.guild)
+    async def serverqueue_save(self, ctx: commands.Context, name: str):
+        "Save the current queue as a reusable server preset."
+        player = await ensure_access(ctx)
+        tracks = player.queue.tracks(True)
+        if not tracks:
+            return await send(ctx, "There are no tracks to save.", ephemeral=True)
+
+        guild_settings = await get_settings(ctx.guild.id)
+        queues = guild_settings.setdefault("saved_queues", {})
+        queues[name.lower()] = {
+            "name": name,
+            "tracks": [track.track_id for track in tracks],
+            "created_by": ctx.author.id,
+            "updated_at": round(time.time()),
+        }
+        await update_settings(ctx.guild.id, {"$set": {"saved_queues": queues}})
+        await send(ctx, f"Saved `{len(tracks)}` tracks to server queue preset **{name}**.")
+
+    @serverqueue.command(name="load", aliases=get_aliases("serverqueueload"))
+    @commands.dynamic_cooldown(cooldown_check, commands.BucketType.guild)
+    async def serverqueue_load(self, ctx: commands.Context, name: str):
+        "Load a saved server queue preset into the player."
+        guild_settings = await get_settings(ctx.guild.id)
+        data = guild_settings.get("saved_queues", {}).get(name.lower())
+        if not data:
+            return await send(ctx, f"Server queue preset **{name}** was not found.", ephemeral=True)
+
+        player = await ensure_player(ctx)
+        tracks = [
+            voicelink.Track(track_id=track_id, info=voicelink.decode(track_id), requester=ctx.author)
+            for track_id in data.get("tracks", [])
+        ]
+        amount = await player.add_track(tracks)
+        await send(ctx, f"Loaded server queue preset **{data.get('name', name)}** with `{amount}` tracks.")
+        if not player.is_playing:
+            await player.do_next()
+
+    @serverqueue.command(name="delete", aliases=get_aliases("serverqueuedelete"))
+    @commands.has_permissions(manage_guild=True)
+    @commands.dynamic_cooldown(cooldown_check, commands.BucketType.guild)
+    async def serverqueue_delete(self, ctx: commands.Context, name: str):
+        "Delete a saved server queue preset."
+        guild_settings = await get_settings(ctx.guild.id)
+        queues = guild_settings.get("saved_queues", {})
+        if name.lower() not in queues:
+            return await send(ctx, f"Server queue preset **{name}** was not found.", ephemeral=True)
+        queues.pop(name.lower(), None)
+        await update_settings(ctx.guild.id, {"$set": {"saved_queues": queues}})
+        await send(ctx, f"Deleted server queue preset **{name}**.")
+
     @commands.hybrid_command(name="audiopreset", aliases=get_aliases("audiopreset"))
     @app_commands.describe(preset="Quick EQ preset for the current player.")
     @app_commands.autocomplete(preset=audio_preset_autocomplete)
@@ -383,6 +562,31 @@ class Advanced(commands.Cog):
         effect = AUDIO_PRESETS[preset_key]()
         await player.add_filter(effect, requester=ctx.author)
         await send(ctx, f"Applied audio preset **{AUDIO_PRESET_LABELS[preset_key]}**.")
+
+    @commands.hybrid_command(name="karaokepreset", aliases=get_aliases("karaokepreset"))
+    @app_commands.describe(preset="Quick karaoke preset: soft, balanced, strong, or vocalcut.")
+    @commands.dynamic_cooldown(cooldown_check, commands.BucketType.guild)
+    async def karaokepreset(self, ctx: commands.Context, preset: str = "balanced"):
+        "Apply a quick karaoke preset for easy sing-along mode."
+        player = await ensure_access(ctx)
+        if not player.is_privileged(ctx.author):
+            return await send(ctx, "missingFunctionPerm", ephemeral=True)
+
+        preset = normalize_text(preset)
+        presets = {
+            "soft": dict(level=0.6, monolevel=0.5, filterband=220.0, filterwidth=90.0),
+            "balanced": dict(level=1.0, monolevel=1.0, filterband=220.0, filterwidth=100.0),
+            "strong": dict(level=1.4, monolevel=1.2, filterband=240.0, filterwidth=110.0),
+            "vocalcut": dict(level=1.8, monolevel=1.0, filterband=250.0, filterwidth=120.0),
+        }
+        if preset not in presets:
+            return await send(ctx, "Unknown karaoke preset. Use soft, balanced, strong, or vocalcut.", ephemeral=True)
+
+        if player.filters.has_filter(filter_tag="karaoke"):
+            await player.remove_filter("karaoke", requester=ctx.author)
+        effect = voicelink.Karaoke(tag="karaoke", mono_level=presets[preset]["monolevel"], filter_band=presets[preset]["filterband"], filter_width=presets[preset]["filterwidth"], level=presets[preset]["level"])
+        await player.add_filter(effect, requester=ctx.author)
+        await send(ctx, f"Applied karaoke preset **{preset}**.")
 
     @commands.hybrid_command(name="radio", aliases=get_aliases("radio"))
     @app_commands.describe(station="Preset station name such as lofi, jazz, or spy.")
@@ -418,6 +622,22 @@ class Advanced(commands.Cog):
             at_front=True,
             announce=f"Soundboard preset queued: **{sound}**.",
         )
+
+    @commands.hybrid_command(name="recommend", aliases=get_aliases("recommend"))
+    @app_commands.describe(amount="Number of similar songs to queue from recommendations.")
+    @commands.dynamic_cooldown(cooldown_check, commands.BucketType.guild)
+    async def recommend(self, ctx: commands.Context, amount: commands.Range[int, 1, 10] = 3):
+        "Queue similar songs based on the current or recent track."
+        player = await ensure_access(ctx)
+        loaded = 0
+        for _ in range(amount):
+            if await player.get_recommendations(track=player.current or None):
+                loaded += 1
+        if not loaded:
+            return await send(ctx, "No recommendations were available right now.", ephemeral=True)
+        await send(ctx, f"Queued `{loaded}` batch{'es' if loaded != 1 else ''} of recommendations.")
+        if not player.is_playing:
+            await player.do_next()
 
     @commands.hybrid_group(
         name="favorites",
@@ -502,6 +722,87 @@ class Advanced(commands.Cog):
         await update_user(ctx.author.id, {"$pull": {"playlist.200.tracks": track_id}})
         await send(ctx, f"Removed **{track.get('title', 'Unknown')}** from your favorites.")
 
+    @commands.hybrid_command(name="partymode", aliases=get_aliases("partymode"))
+    @commands.dynamic_cooldown(cooldown_check, commands.BucketType.guild)
+    async def partymode(self, ctx: commands.Context):
+        "Toggle party mode with faster vote skips and auto-shuffle."
+        guild_settings = await get_settings(ctx.guild.id)
+        enabled = not guild_settings.get("party_mode", False)
+        await update_settings(ctx.guild.id, {"$set": {"party_mode": enabled}})
+        player: voicelink.Player = ctx.guild.voice_client
+        if player:
+            player.settings["party_mode"] = enabled
+            if enabled and len(player.queue.tracks()) >= 3:
+                await player.shuffle("queue", ctx.author)
+        await send(ctx, f"Party mode has been {'enabled' if enabled else 'disabled'}.")
+
+    @commands.hybrid_command(name="musicstats", aliases=get_aliases("musicstats"))
+    @commands.dynamic_cooldown(cooldown_check, commands.BucketType.guild)
+    async def musicstats(self, ctx: commands.Context):
+        "Show server music statistics."
+        guild_settings = await get_settings(ctx.guild.id)
+        stats = guild_settings.get("music_stats")
+        if not stats:
+            return await send(ctx, "No music stats have been collected yet.")
+
+        embed = discord.Embed(title=f"{ctx.guild.name} Music Stats", color=settings.embed_color)
+        embed.add_field(
+            name="Overview",
+            value=(
+                f"Tracks played: `{stats.get('total_tracks', 0)}`\n"
+                f"Play time: `{ctime(int(stats.get('total_minutes', 0) * 60000))}`"
+            ),
+            inline=False,
+        )
+        top_songs = stats.get("songs", [])[:5]
+        top_users = stats.get("users", [])[:5]
+        embed.add_field(
+            name="Top Songs",
+            value="\n".join([f"`{i}.` {item['title']} ({item['count']})" for i, item in enumerate(top_songs, start=1)]) or "No data",
+            inline=False,
+        )
+        embed.add_field(
+            name="Top Listeners",
+            value="\n".join([f"`{i}.` {item['name']} ({item['count']})" for i, item in enumerate(top_users, start=1)]) or "No data",
+            inline=False,
+        )
+        await send(ctx, embed)
+
+    @commands.hybrid_command(name="lyricslive", aliases=get_aliases("lyricslive"))
+    @commands.dynamic_cooldown(cooldown_check, commands.BucketType.guild)
+    async def lyricslive(self, ctx: commands.Context):
+        "Open a live-synced lyrics panel when synced lyrics are available."
+        player = await ensure_access(ctx)
+        if not player.current:
+            return await send(ctx, "noTrackPlaying", ephemeral=True)
+
+        lyrics_platform = LYRICS_PLATFORMS.get(settings.lyrics_platform)
+        if not lyrics_platform:
+            return await send(ctx, "Lyrics provider is unavailable right now.", ephemeral=True)
+
+        lyrics = await lyrics_platform().get_lyrics(player.current.title, player.current.author)
+        if not lyrics or not lyrics.get("synced"):
+            return await send(ctx, "Synced lyrics are unavailable for this track.", ephemeral=True)
+
+        view = LyricsView(name=player.current.title, source=lyrics, author=ctx.author, player=player)
+        view.lang = "synced"
+        view.pages = max(len(view.synced_source), 1)
+        view.response = await send(ctx, view.build_embed(), view=view)
+        view.start_auto_sync()
+
+    @commands.hybrid_command(name="followvoice", aliases=get_aliases("followvoice"))
+    @commands.has_permissions(manage_guild=True)
+    @commands.dynamic_cooldown(cooldown_check, commands.BucketType.guild)
+    async def followvoice(self, ctx: commands.Context):
+        "Toggle follow mode so the bot follows the DJ when they switch voice channels."
+        guild_settings = await get_settings(ctx.guild.id)
+        enabled = not guild_settings.get("follow_voice", False)
+        await update_settings(ctx.guild.id, {"$set": {"follow_voice": enabled}})
+        player: voicelink.Player = ctx.guild.voice_client
+        if player:
+            player.settings["follow_voice"] = enabled
+        await send(ctx, f"Voice follow mode has been {'enabled' if enabled else 'disabled'}.")
+
     @commands.hybrid_command(name="musicquiz", aliases=get_aliases("musicquiz"))
     @app_commands.describe(duration="How many seconds users have to answer.")
     @commands.dynamic_cooldown(cooldown_check, commands.BucketType.guild)
@@ -585,6 +886,7 @@ class Advanced(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voicelink_track_start(self, player: voicelink.Player, track, _):
+        await self._update_music_stats(player, track)
         settings_data = await get_settings(player.guild.id)
         channel_id = settings_data.get("song_announcement_channel_id")
         if not channel_id:
@@ -609,6 +911,15 @@ class Advanced(commands.Cog):
             await channel.send(embed=embed)
         except discord.HTTPException:
             pass
+
+        if settings_data.get("party_mode", False) and len(player.queue.tracks()) >= 3:
+            last_shuffle = self.party_shuffle_cache.get(player.guild.id, 0)
+            if (time.time() - last_shuffle) > 8:
+                try:
+                    await player.shuffle("queue")
+                    self.party_shuffle_cache[player.guild.id] = time.time()
+                except Exception:
+                    pass
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -666,6 +977,33 @@ class Advanced(commands.Cog):
             )
         except Exception:
             return
+
+    @commands.Cog.listener()
+    async def on_voicelink_websocket_closed(self, payload):
+        guild = payload.guild
+        if not guild:
+            return
+
+        player: voicelink.Player = guild.voice_client
+        if not player or not player.current or not player.channel:
+            return
+
+        position = int(player.position)
+        track = player.current
+
+        async def resume_after_disconnect():
+            await asyncio.sleep(3)
+            try:
+                if not guild.me.voice and player.channel:
+                    await player.connect(timeout=0.0, reconnect=True)
+                if not player.is_playing and track:
+                    await player.play(track, start=position)
+                    if player.is_paused:
+                        await player.set_pause(True)
+            except Exception:
+                return
+
+        self.bot.loop.create_task(resume_after_disconnect())
 
 
 async def setup(bot: commands.Bot) -> None:

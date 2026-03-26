@@ -269,10 +269,12 @@ class Player(VoiceProtocol):
         if self.settings.get('disabled_vote'):
             return 0
 
-        required = ceil((len(self.channel.members) - 1) / 2.5)
+        divider = 3.5 if self.settings.get("party_mode", False) else 2.5
+        required = ceil((len(self.channel.members) - 1) / divider)
+        required = max(required, 1)
         if leave:
             if len(self.channel.members) == 3:
-                required = 2
+                required = 1 if self.settings.get("party_mode", False) else 2
         
         return required
     
