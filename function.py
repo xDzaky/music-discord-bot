@@ -140,9 +140,32 @@ def format_time(number:str) -> int:
     
     return (int(num.tm_hour) * 3600 + int(num.tm_min) * 60 + int(num.tm_sec)) * 1000
 
+DEFAULT_SOURCE_SETTINGS = {
+    "youtube": {"emoji": "▶️", "color": "0xFF0000"},
+    "youtubemusic": {"emoji": "▶️", "color": "0xFF0000"},
+    "spotify": {"emoji": "🟢", "color": "0x1DB954"},
+    "soundcloud": {"emoji": "🟠", "color": "0xFF7700"},
+    "twitch": {"emoji": "🟣", "color": "0x9B4AFF"},
+    "bandcamp": {"emoji": "🔵", "color": "0x6F98A7"},
+    "vimeo": {"emoji": "🎬", "color": "0x1ABCEA"},
+    "applemusic": {"emoji": "🎵", "color": "0xE298C4"},
+    "reddit": {"emoji": "👽", "color": "0xFF5700"},
+    "tiktok": {"emoji": "🎶", "color": "0x74ECE9"},
+    "http": {"emoji": "🔗", "color": "0xb3b3b3"},
+    "https": {"emoji": "🔗", "color": "0xb3b3b3"},
+    "others": {"emoji": "🔗", "color": "0xb3b3b3"},
+}
+
 def get_source(source: str, type: str) -> str:
-    source_settings: dict[str, str] = settings.sources_settings.get(source.lower().replace(" ", ""), settings.sources_settings.get("others"))
-    return source_settings.get(type)
+    normalized = (source or "others").lower().replace(" ", "")
+    configured_sources = settings.sources_settings or {}
+    source_settings = (
+        configured_sources.get(normalized)
+        or DEFAULT_SOURCE_SETTINGS.get(normalized)
+        or configured_sources.get("others")
+        or DEFAULT_SOURCE_SETTINGS["others"]
+    )
+    return source_settings.get(type, DEFAULT_SOURCE_SETTINGS["others"].get(type))
 
 def cooldown_check(ctx: commands.Context) -> Optional[commands.Cooldown]:
     if ctx.author.id in settings.bot_access_user:

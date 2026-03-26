@@ -203,6 +203,9 @@ class Node:
                 elif msg.type == aiohttp.WSMsgType.ERROR:
                     self._logger.error(f"WebSocket error for node [{self._identifier}]")
                     break
+
+                elif msg.type != aiohttp.WSMsgType.TEXT or not msg.data:
+                    continue
                 
                 self._bot.loop.create_task(self._handle_payload(msg.json()))
 

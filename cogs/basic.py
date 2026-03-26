@@ -89,22 +89,35 @@ class Basic(commands.Cog):
         if voicelink.pool.URL_REGEX.match(current):
             return []
 
-        if current:
-            node = voicelink.NodePool.get_node()
-            if not node:
-                return []
-            
-            tracks: list[voicelink.Track] = await node.get_tracks(current, requester=interaction.user)
-            if not tracks:
-                return []
-            
-            if isinstance(tracks, voicelink.Playlist):
-                tracks = tracks.tracks
+        history = []
+        current_lower = current.lower()
+        seen = set()
 
-            return [app_commands.Choice(name=truncate_string(f"🎵 {track.author} - {track.title}", 100), value=truncate_string(f"{track.author} - {track.title}", 100)) for track in tracks]
-        
-        history = {track["identifier"]: track for track_id in reversed(await get_user(interaction.user.id, "history")) if (track := voicelink.decode(track_id))["uri"]}
-        return [app_commands.Choice(name=truncate_string(f"🕒 {track['author']} - {track['title']}", 100), value=track['uri']) for track in history.values() if len(track['uri']) <= 100][:25]
+        for track_id in reversed(await get_user(interaction.user.id, "history")):
+            track = voicelink.decode(track_id)
+            uri = track.get("uri")
+            identifier = track.get("identifier")
+
+            if not uri or identifier in seen or len(uri) > 100:
+                continue
+
+            seen.add(identifier)
+            label = f"{track['author']} - {track['title']}"
+
+            if current and current_lower not in label.lower() and current_lower not in uri.lower():
+                continue
+
+            history.append(
+                app_commands.Choice(
+                    name=truncate_string(f"{'🎵' if current else '🕒'} {label}", 100),
+                    value=uri if not current else truncate_string(label, 100)
+                )
+            )
+
+            if len(history) >= 25:
+                break
+
+        return history
             
     @commands.hybrid_command(name="connect", aliases=get_aliases("connect"))
     @app_commands.describe(channel="Provide a channel to connect.")
@@ -805,7 +818,7 @@ class Basic(commands.Cog):
             if not lyrics:
                 return await send(ctx, "lyricsNotFound", ephemeral=True)
             
-            view = LyricsView(name=title, source={_: re.findall(r'.*\n(?:.*\n){,22}', v or "") for _, v in lyrics.items()}, author=ctx.author)
+            view = LyricsView(name=title, source=lyrics, author=ctx.author, player=ctx.guild.voice_client)
             view.response = await send(ctx, view.build_embed(), view=view)
 
     @commands.hybrid_command(name="swapdj", aliases=get_aliases("swapdj"))

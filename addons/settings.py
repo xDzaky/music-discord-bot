@@ -71,6 +71,70 @@ def _build_env_nodes() -> Dict[str, Dict[str, Union[str, int, bool]]]:
         }
     }
 
+DEFAULT_CONTROLLER = {
+    "embeds": {
+        "active": {
+            "description": "**Now Playing: `[@@track_name@@]`\nLink: [Click Me](@@track_url@@) | Requester: @@track_requester_mention@@ | DJ: @@dj@@**",
+            "footer": {
+                "text": "Queue Length: @@queue_length@@ | Duration: @@track_duration@@ | Volume: @@volume@@% {{loop_mode != 'Off' ?? | Repeat: @@loop_mode@@}}"
+            },
+            "image": "@@track_thumbnail@@",
+            "author": {
+                "name": "Music Controller | @@channel_name@@",
+                "icon_url": "@@bot_icon@@"
+            },
+            "color": "@@track_color@@"
+        },
+        "inactive": {
+            "title": {
+                "name": "There are no songs playing right now"
+            },
+            "description": "[Support](@@server_invite_link@@) | [Invite](@@invite_link@@)",
+            "image": "https://i.imgur.com/dIFBwU7.png",
+            "color": "@@default_embed_color@@"
+        }
+    },
+    "buttons": [
+        {
+            "back": {
+                "emoji": "⏮️",
+                "label": "@@t_buttonBack@@"
+            },
+            "play-pause": {
+                "states": {
+                    "pause": {
+                        "emoji": "⏸️",
+                        "label": "@@t_buttonPause@@"
+                    },
+                    "resume": {
+                        "emoji": "▶️",
+                        "label": "@@t_buttonResume@@"
+                    }
+                }
+            },
+            "skip": {
+                "emoji": "⏭️",
+                "label": "@@t_buttonSkip@@"
+            },
+            "stop": {
+                "emoji": "⏹️",
+                "label": "@@t_buttonLeave@@",
+                "style": "red"
+            },
+            "add-fav": {
+                "emoji": "❤️",
+                "label": ""
+            }
+        },
+        {
+            "tracks": {
+                "label": "@@t_playerDropdown@@",
+                "max_options": 10
+            }
+        }
+    ]
+}
+
 class Settings:
     def __init__(self, settings: Dict) -> None:
         self.token: str = _first_non_empty(settings.get("token"), os.getenv("TOKEN"))
@@ -90,7 +154,7 @@ class Settings:
         self.sources_settings: Dict[Dict[str, str]] = settings.get("sources_settings", {})
         self.cooldowns_settings: Dict[str, List[int]] = settings.get("cooldowns", {})
         self.aliases_settings: Dict[str, List[str]] = settings.get("aliases", {})
-        self.controller: Dict[str, Dict[str, Any]] = settings.get("default_controller", {})
+        self.controller: Dict[str, Dict[str, Any]] = settings.get("default_controller") or DEFAULT_CONTROLLER
         self.voice_status_template: str = settings.get("default_voice_status_template", "")
         self.lyrics_platform: str = settings.get("lyrics_platform", "A_ZLyrics").lower()
         ipc_settings = settings.get("ipc_client", {})

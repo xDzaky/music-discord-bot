@@ -333,16 +333,23 @@ class Player(VoiceProtocol):
 
     async def _dispatch_voice_update(self, voice_data: Dict[str, Any] = None):
         """Dispatches a voice update to the node."""
-        if {"sessionId", "event"} != self._voice_state.keys():
+        state = voice_data or self._voice_state
+
+        if not {"sessionId", "event"}.issubset(state.keys()):
             self._logger.debug(f"Player in {self.guild.name}({self.guild.id}) dispatched voice update failed {voice_data}")
             return
 
-        state = voice_data or self._voice_state
+        channel_id = state.get("channelId") or (str(self.channel.id) if self.channel else None)
+
+        if not channel_id:
+            self._logger.debug(f"Player in {self.guild.name}({self.guild.id}) has no channel id for voice update {state}")
+            return
 
         data = {
             "token": state['event']['token'],
             "endpoint": state['event']['endpoint'],
             "sessionId": state['sessionId'],
+            "channelId": str(channel_id),
         }
         
         await self.send(method=RequestMethod.PATCH, data={"voice": data})
@@ -355,7 +362,10 @@ class Player(VoiceProtocol):
 
     async def on_voice_state_update(self, data: dict):
         """Handles a voice state update event."""
-        self._voice_state.update({"sessionId": data.get("session_id")})
+        self._voice_state.update({
+            "sessionId": data.get("session_id"),
+            "channelId": data.get("channel_id")
+        })
 
         if not (channel_id := data.get("channel_id")):
             await self.teardown()
@@ -453,7 +463,14 @@ class Player(VoiceProtocol):
         self._updating = True
 
         try:            
-            embed, view = self.build_embed(self.current), InteractiveController(self)
+            embed = self.build_embed(self.current)
+            view = InteractiveController(self)
+            if not view.children:
+                view = None
+
+            if not embed.to_dict() and view is None:
+                return
+
             if not self.controller:
                 if request_channel_data := self.settings.get("music_request_channel"):
                     channel = self.bot.get_channel(request_channel_data.get("text_channel_id"))

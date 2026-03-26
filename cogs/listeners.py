@@ -41,6 +41,8 @@ class Listeners(commands.Cog):
         
     async def start_nodes(self) -> None:
         """Connect and intiate nodes."""
+        await self.bot.wait_until_ready()
+
         if not func.settings.nodes:
             func.logger.error("No Lavalink node configuration found. Set a node in settings.json or environment variables.")
             return
@@ -53,7 +55,7 @@ class Listeners(commands.Cog):
                     **n
                 )
             except Exception as e:
-                func.logger.error(f'Node {n["identifier"]} is not able to connect! - Reason: {e}')
+                func.logger.error(f'Node {n["identifier"]} is not able to connect! - Reason: {e}', exc_info=e)
 
     async def restore_last_session_players(self) -> None:
         """Re-establish connections for players from the last session."""

@@ -246,7 +246,16 @@ class Lrclib(LyricsPlatform):
         params = {"q": title}
         result = await self.get(self.base_url + "search", params)
         if result:
-            return {"default": result[0].get("plainLyrics", "")}
+            top_result = result[0]
+            lyrics = {}
+
+            if top_result.get("plainLyrics"):
+                lyrics["default"] = top_result.get("plainLyrics", "")
+
+            if top_result.get("syncedLyrics"):
+                lyrics["synced"] = top_result.get("syncedLyrics", "")
+
+            return lyrics or None
 
 """
 Strvm/musicxmatch-api: a reverse engineered API wrapper for MusicXMatch  

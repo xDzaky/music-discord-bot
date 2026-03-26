@@ -354,7 +354,7 @@ class Lyrics(ControlButton):
             if not lyrics:
                 return await self.send(interaction, "lyricsNotFound", ephemeral=True)
 
-            view = views.LyricsView(name=title, source={_: re.findall(r'.*\n(?:.*\n){,22}', v or "") for _, v in lyrics.items()}, author=interaction.user)
+            view = views.LyricsView(name=title, source=lyrics, author=interaction.user, player=self.player)
             view.response = await self.send(interaction, view.build_embed(), view=view, ephemeral=True)
 
 class Tracks(discord.ui.Select):
@@ -443,7 +443,9 @@ class InteractiveController(discord.ui.View):
         super().__init__(timeout=None)
 
         self.player: voicelink.Player = player
-        for row_num, btn_row in enumerate(func.settings.controller.get("buttons")):
+        buttons = (func.settings.controller or {}).get("buttons") or []
+
+        for row_num, btn_row in enumerate(buttons):
             for btn_name, btn_data in btn_row.items():
                 btn_class = BUTTON_TYPE.get(btn_name.lower())
                 if not btn_class:
