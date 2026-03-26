@@ -103,7 +103,12 @@ class Vocard(commands.Bot):
             raise Exception("MONGODB_NAME and MONGODB_URL can't be empty in settings.json or environment variables.")
 
         try:
-            func.MONGO_DB = AsyncIOMotorClient(host=db_url)
+            # Add SSL/TLS parameters for MongoDB Atlas compatibility
+            func.MONGO_DB = AsyncIOMotorClient(
+                host=db_url,
+                tlsAllowInvalidCertificates=True,
+                serverSelectionTimeoutMS=30000
+            )
             await func.MONGO_DB.server_info()
             func.logger.info(f"Successfully connected to [{db_name}] MongoDB!")
 

@@ -1,4 +1,4 @@
-app = "replace-with-your-lavalink-app-name"
+app = "music-discord-bot-lavalink"
 primary_region = "sin"
 
 [build]

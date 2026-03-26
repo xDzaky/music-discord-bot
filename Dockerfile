@@ -20,6 +20,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Stage 2: Runtime
 FROM python:3.12-slim-bookworm
 
+# Install CA certificates dan OpenSSL libraries untuk SSL/TLS connections
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    openssl \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/* \
+    && update-ca-certificates
+
 # Set the working directory
 WORKDIR /app
 
