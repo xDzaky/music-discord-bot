@@ -33,6 +33,7 @@ from function import (
     format_time,
     get_source,
     get_user,
+    update_user,
     get_lang,
     truncate_string,
     cooldown_check,
@@ -439,7 +440,35 @@ class Basic(commands.Cog):
         await send(ctx, "skipped", ctx.author)
         if player.queue._repeat.mode == voicelink.LoopType.TRACK:
             await player.set_repeat(voicelink.LoopType.OFF)
-            
+
+        await player.stop()
+
+    @commands.hybrid_command(name="forceskip", aliases=get_aliases("forceskip"))
+    @app_commands.describe(index="Enter a index that you want to skip to.")
+    @commands.dynamic_cooldown(cooldown_check, commands.BucketType.guild)
+    async def forceskip(self, ctx: commands.Context, index: int = 0):
+        "Force skip the current song (DJ/Admin only, bypasses voting)."
+        player: voicelink.Player = ctx.guild.voice_client
+        if not player:
+            return await send(ctx, "noPlayer", ephemeral=True)
+
+        if not player.node._available:
+            return await send(ctx, "nodeReconnect")
+
+        if not player.is_playing:
+            return await send(ctx, "skipError", ephemeral=True)
+
+        # Require DJ/Admin privilege - no voting allowed
+        if not player.is_privileged(ctx.author):
+            return await send(ctx, "missingFunctionPerm", ephemeral=True)
+
+        if index:
+            player.queue.skipto(index)
+
+        await send(ctx, "skipped", ctx.author)
+        if player.queue._repeat.mode == voicelink.LoopType.TRACK:
+            await player.set_repeat(voicelink.LoopType.OFF)
+
         await player.stop()
 
     @commands.hybrid_command(name="back", aliases=get_aliases("back"))
@@ -868,9 +897,37 @@ class Basic(commands.Cog):
 
         if not player.is_playing:
             await player.do_next()
-        
+
         if player.is_ipc_connected:
             await player.send_ws({"op": "toggleAutoplay", "status": check})
+
+    @commands.hybrid_command(name="fav", aliases=get_aliases("fav"))
+    @commands.dynamic_cooldown(cooldown_check, commands.BucketType.guild)
+    async def fav(self, ctx: commands.Context):
+        "Quickly add the current playing song to your Favourites playlist."
+        player: voicelink.Player = ctx.guild.voice_client
+        if not player:
+            return await send(ctx, "noPlayer", ephemeral=True)
+
+        if not player.current:
+            return await send(ctx, "noTrackPlaying", ephemeral=True)
+
+        track = player.current
+
+        if track.is_stream:
+            return await send(ctx, "playlistStream", ephemeral=True)
+
+        # Get user's playlist data
+        user = await get_user(ctx.author.id, 'playlist')
+        favourite = user.get('200', {})
+
+        # Check for duplicate
+        if track.track_id in favourite.get('tracks', []):
+            return await send(ctx, "playlistRepeated", ephemeral=True)
+
+        # Add to favourites (playlist ID 200 is reserved for favourites)
+        await update_user(ctx.author.id, {"$push": {"playlist.200.tracks": track.track_id}})
+        await send(ctx, "playlistAdded", track.title, ctx.author, "Favourites")
 
     @commands.hybrid_command(name="help", aliases=get_aliases("help"))
     @app_commands.autocomplete(category=help_autocomplete)

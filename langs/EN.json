@@ -168,5 +168,16 @@
     "invalidEndTime": "Invalid end time, it must be between `00:00` and `{0}`",
     "invalidTimeOrder": "End time cannot be less than or equal to start time",
     "setStageAnnounceTemplate": "Done! From now on, voice status like the one you're in now will be named according to your template. You should see it update in a few seconds.",
-    "createSongRequestChannel": "A song request channel ({0}) has been created! You can start requesting any song by name or URL in that channel, without needing to use the bot prefix."
+    "createSongRequestChannel": "A song request channel ({0}) has been created! You can start requesting any song by name or URL in that channel, without needing to use the bot prefix.",
+    "sleepTimerSet": "⏲️ Sleep timer set. The bot will disconnect in `{0}` minutes.",
+    "sleepTimerCancel": "⏲️ Sleep timer cancelled.",
+    "toggleAnnounce": "🔔 Song announcements are now `{0}`.",
+    "nowPlayingAnnounce": "🎵 Now Playing: **{0}** by **{1}** (`{2}`)",
+    "radioNotFound": "❌ Radio station not found. Use `/radio` to see available stations.",
+    "radioStart": "{0} Now playing **{1}** radio station!",
+    "soundboardNotFound": "❌ Sound effect not found. Use `/soundboard` to see available effects.",
+    "soundboardPlay": "{0} Playing sound effect: **{1}**",
+    "quizStart": "🎮 Music Quiz starting with `{0}` rounds! Get ready to guess the songs!",
+    "quizNotEnoughTracks": "❌ Not enough tracks in queue/history. Need at least `{0}` tracks to start the quiz.",
+    "toggleSpotifySync": "🎵 Spotify activity sync is now `{0}`."
 }

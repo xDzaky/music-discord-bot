@@ -261,6 +261,35 @@ class Settings(commands.Cog, name="settings"):
         await update_settings(ctx.guild.id, {"$set": {'stage_announce_template': template}})
         await send(ctx, "setStageAnnounceTemplate")
 
+    @settings.command(name="sleeptimer", aliases=get_aliases("sleeptimer"))
+    @app_commands.describe(minutes="Minutes until auto-disconnect (0 to cancel, max 480)")
+    @commands.dynamic_cooldown(cooldown_check, commands.BucketType.guild)
+    async def sleeptimer(self, ctx: commands.Context, minutes: commands.Range[int, 0, 480] = 0):
+        "Set a sleep timer to auto-disconnect the bot after specified minutes."
+        player: voicelink.Player = ctx.guild.voice_client
+        if not player:
+            return await send(ctx, "noPlayer", ephemeral=True)
+
+        if not player.is_privileged(ctx.author):
+            return await send(ctx, "missingFunctionPerm", ephemeral=True)
+
+        if minutes == 0:
+            player.cancel_sleep_timer()
+            return await send(ctx, "sleepTimerCancel")
+
+        await player.set_sleep_timer(minutes, ctx.author)
+        await send(ctx, "sleepTimerSet", minutes)
+
+    @settings.command(name="announce", aliases=get_aliases("announce"))
+    @commands.has_permissions(manage_guild=True)
+    @commands.dynamic_cooldown(cooldown_check, commands.BucketType.guild)
+    async def announce(self, ctx: commands.Context):
+        "Toggle song announcements when a new track starts playing."
+        settings = await get_settings(ctx.guild.id)
+        toggle = not settings.get('song_announce', False)
+        await update_settings(ctx.guild.id, {"$set": {'song_announce': toggle}})
+        await send(ctx, 'toggleAnnounce', await get_lang(ctx.guild.id, "enabled" if toggle else "disabled"))
+
     @settings.command(name="setupchannel", aliases=get_aliases("setupchannel"))
     @app_commands.describe(
         channel="Provide a request channel. If not, a text channel will be generated."

@@ -272,7 +272,7 @@ if not func.HAS_SETTINGS_FILE:
 intents = discord.Intents.default()
 intents.message_content = False if func.settings.bot_prefix is None else True
 intents.members = func.settings.ipc_client.get("enable", False)
-intents.presences = True
+intents.presences = False  # Disabled - requires privileged intent
 intents.voice_states = True
 
 bot = Vocard(

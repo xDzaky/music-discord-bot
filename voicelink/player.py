@@ -145,6 +145,9 @@ class Player(VoiceProtocol):
         self.shuffle_votes = set()
         self.stop_votes = set()
 
+        self._sleep_timer: Optional[float] = None  # Unix timestamp when to disconnect
+        self._sleep_timer_task: Optional[Any] = None  # Asyncio task for sleep timer
+
         self._ph = Placeholders(client, self)
         self._logger: Optional[logging.Logger] = self._node._logger
 
@@ -433,6 +436,19 @@ class Player(VoiceProtocol):
         else:
             try:
                 await self.play(track, start=track.position)
+
+                # Song announcement
+                if self.settings.get('song_announce', False) and track:
+                    try:
+                        lang_key = func.get_lang_non_async(self.guild.id, "nowPlayingAnnounce")
+                        if lang_key:
+                            await self.context.channel.send(
+                                lang_key.format(track.title, track.author, track.formatted_length),
+                                delete_after=30
+                            )
+                    except:
+                        pass
+
             except Exception as e:
                 self._logger.error(f"Something went wrong while playing music in {self.guild.name}({self.guild.id})", exc_info=e)
                 await sleep(5)
@@ -911,3 +927,43 @@ class Player(VoiceProtocol):
         if requester:
             payload['requesterId'] = str(requester.id)
         await self.bot.ipc.send(payload)
+
+    async def set_sleep_timer(self, minutes: int, requester: Member = None) -> Optional[float]:
+        """Sets a sleep timer to disconnect after specified minutes."""
+        import asyncio
+
+        if self._sleep_timer_task and not self._sleep_timer_task.done():
+            self._sleep_timer_task.cancel()
+
+        if minutes <= 0:
+            self._sleep_timer = None
+            self._logger.debug(f"Player in {self.guild.name}({self.guild.id}) sleep timer cancelled.")
+            return None
+
+        self._sleep_timer = time.time() + (minutes * 60)
+
+        # Create background task for sleep timer
+        async def _sleep_disconnect():
+            await asyncio.sleep(minutes * 60)
+            if self._sleep_timer and not self.is_dead:
+                await self.teardown()
+
+        self._sleep_timer_task = self._bot.loop.create_task(_sleep_disconnect())
+
+        self._logger.debug(f"Player in {self.guild.name}({self.guild.id}) sleep timer set for {minutes} minutes.")
+        return self._sleep_timer
+
+    def cancel_sleep_timer(self) -> None:
+        """Cancels the active sleep timer."""
+        if self._sleep_timer_task and not self._sleep_timer_task.done():
+            self._sleep_timer_task.cancel()
+        self._sleep_timer = None
+
+    @property
+    def sleep_timer_remaining(self) -> Optional[int]:
+        """Returns remaining minutes until sleep timer triggers, or None if not set."""
+        if not self._sleep_timer:
+            return None
+        remaining = self._sleep_timer - time.time()
+        return max(0, int(remaining / 60)) if remaining > 0 else 0
+
