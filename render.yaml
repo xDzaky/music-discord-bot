@@ -1,0 +1,42 @@
+services:
+  # Lavalink Server
+  - type: web
+    name: music-bot-lavalink
+    env: docker
+    dockerfilePath: ./lavalink/Dockerfile
+    dockerContext: ./lavalink
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: LAVALINK_SERVER_PASSWORD
+        sync: false
+      - key: PORT
+        value: 2333
+
+  # Discord Bot
+  - type: worker
+    name: music-discord-bot
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: TOKEN
+        sync: false
+      - key: CLIENT_ID
+        sync: false
+      - key: MONGODB_URL
+        sync: false
+      - key: MONGODB_NAME
+        value: vocard
+      - key: LAVALINK_HOST
+        value: music-bot-lavalink.onrender.com
+      - key: LAVALINK_PORT
+        value: 2333
+      - key: LAVALINK_PASSWORD
+        sync: false
+      - key: LAVALINK_IDENTIFIER
+        value: DEFAULT
+      - key: LAVALINK_SECURE
+        value: true
+      - key: IPC_ENABLE
+        value: false
