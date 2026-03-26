@@ -279,6 +279,10 @@ class Advanced(commands.Cog):
         }
 
     async def _update_music_stats(self, player: voicelink.Player, track) -> None:
+        # Guard against None track
+        if not track or not track.requester:
+            return
+
         guild_settings = await get_settings(player.guild.id)
         stats = guild_settings.setdefault("music_stats", {
             "total_tracks": 0,
@@ -886,6 +890,10 @@ class Advanced(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voicelink_track_start(self, player: voicelink.Player, track):
+        # Guard against None track
+        if not track or not track.requester:
+            return
+
         await self._update_music_stats(player, track)
         settings_data = await get_settings(player.guild.id)
         channel_id = settings_data.get("song_announcement_channel_id")
