@@ -2,7 +2,7 @@ app = "replace-with-your-lavalink-app-name"
 primary_region = "sin"
 
 [build]
-  dockerfile = "Dockerfile-lavalink"
+  dockerfile = "Dockerfile"
 
 [env]
   LAVALINK_REQUEST_LOGGING = "true"
